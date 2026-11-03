@@ -1,0 +1,13 @@
+{
+  "name": "word-clash-game",
+  "version": "1.0.0",
+  "description": "เกมแข่งตอบคำถาม ก-ฮ เล่นกับเพื่อนแบบ Real-time",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
