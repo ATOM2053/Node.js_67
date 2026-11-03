@@ -30,19 +30,13 @@
     .hidden { display: none !important; }
     .flex-row { display: flex; gap: 10px; }
 
-    /* Typing Animation */
-    .typing-input {
-      transition: all 0.1s ease;
-    }
-    .typing-input:focus {
-      animation: pulse 0.5s infinite alternate;
-    }
+    .typing-input { transition: all 0.1s ease; }
+    .typing-input:focus { animation: pulse 0.5s infinite alternate; }
     @keyframes pulse {
       0% { border-color: var(--primary); box-shadow: 0 0 5px var(--primary); }
       100% { border-color: var(--secondary); box-shadow: 0 0 15px var(--secondary); }
     }
 
-    /* Rank Badge Style (Free Fire Vibe) */
     .rank-badge {
       display: inline-block;
       padding: 4px 12px;
@@ -62,7 +56,7 @@
 
 <div class="container">
 
-  <!-- หน้า 1: ลงทะเบียน (เซฟความจำลง localStorage ไม่ต้องพิมพ์ใหม่) -->
+  <!-- หน้า 1: ลงทะเบียน -->
   <div id="auth-screen">
     <h1>⚔️ คำถาม ก-ฮ สู้เพื่อน ⚔️</h1>
     <div class="card-box">
@@ -77,13 +71,12 @@
         <option value="ชลบุรี">ชลบุรี</option>
         <option value="นครราชสีมา">นครราชสีมา</option>
         <option value="ภูเก็ต">ภูเก็ต</option>
-        <!-- สามารถเพิ่มให้ครบ 76 จังหวัดได้ -->
       </select>
       <button onclick="saveAndRegister()">เข้าสู่ล็อบบี้</button>
     </div>
   </div>
 
-  <!-- หน้า 2: UI ล็อบบี้ -->
+  <!-- หน้า 2: ล็อบบี้ -->
   <div id="lobby-screen" class="hidden">
     <h2>🏰 ล็อบบี้เกม</h2>
     <div class="card-box" style="text-align: center;">
@@ -117,7 +110,7 @@
     <button class="secondary" onclick="showLobby()">ยกเลิก</button>
   </div>
 
-  <!-- หน้าห้องรอเล่น (Waiting Room) -->
+  <!-- หน้าห้องรอเล่น -->
   <div id="room-screen" class="hidden">
     <h2>ห้อง: <span id="room-title"></span> (ID: <span id="room-id-text"></span>)</h2>
     <div class="card-box">
@@ -127,7 +120,7 @@
     <button id="btn-start-game" onclick="startGame()">🚀 เริ่มเกมทันที (สำหรับเจ้าของห้อง)</button>
   </div>
 
-  <!-- หน้าแข่งขันเกม (Gameplay) -->
+  <!-- หน้าแข่งขันเกม -->
   <div id="game-screen" class="hidden">
     <div class="timer">⏱️ เวลาเหลือ: <span id="time-left">120</span> วินาที</div>
     <h3>รอบที่ <span id="round-num">1</span>/3 | ตัวอักษรประจำรอบ:</h3>
@@ -164,7 +157,6 @@
   const socket = io();
   let currentUser = {};
 
-  // เสียงประกอบ Effect (Audio API)
   const clickSound = new Audio('https://cdn.freesound.org/previews/536/536108_11861866-lq.mp3');
   const typeSound = new Audio('https://cdn.freesound.org/previews/256/256116_4486188-lq.mp3');
 
@@ -173,7 +165,6 @@
     typeSound.play().catch(()=>{});
   }
 
-  // เซฟและโหลดข้อมูลใน localStorage ไม่ให้หายเวลาโหลดเว็บใหม่
   window.onload = () => {
     const savedUser = localStorage.getItem('word_game_user');
     if (savedUser) {
@@ -246,7 +237,6 @@
     const list = document.getElementById('player-list');
     list.innerHTML = room.players.map(p => `<li>👤 ${p.username} (${p.province}) - ${p.score} คะแนน</li>`).join('');
 
-    // เฉพาะ host ถึงจะเห็นปุ่มกดเริ่มเกม
     if (room.hostId === socket.id) {
       document.getElementById('btn-start-game').classList.remove('hidden');
     } else {
@@ -273,7 +263,7 @@
       </div>
     `).join('');
 
-    let time = data.thinkTime; // 120 วินาที
+    let time = data.thinkTime;
     document.getElementById('time-left').innerText = time;
 
     clearInterval(timerInterval);
