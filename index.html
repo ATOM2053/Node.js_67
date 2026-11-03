@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>เกมตอบคำถาม ก-ฮ สู้เพื่อน</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --primary: #00f3ff;
+      --secondary: #ff0055;
+      --bg: #0d0e15;
+      --card: #181a26;
+      --text: #ffffff;
+    }
+
+    * { box-sizing: border-box; font-family: 'Kanit', sans-serif; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow-x: hidden; }
+
+    .container { width: 100%; max-width: 800px; background: var(--card); border: 2px solid var(--primary); border-radius: 16px; padding: 24px; box-shadow: 0 0 20px rgba(0, 243, 255, 0.2); }
+    h1, h2, h3 { text-align: center; color: var(--primary); text-shadow: 0 0 10px var(--primary); margin-bottom: 16px; }
+
+    input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; background: #222536; color: white; font-size: 16px; outline: none; }
+    input:focus { border-color: var(--primary); box-shadow: 0 0 8px var(--primary); }
+
+    button { background: linear-gradient(45deg, var(--primary), #0066ff); color: black; font-weight: bold; cursor: pointer; transition: 0.2s; border: none; }
+    button:hover { transform: scale(1.02); box-shadow: 0 0 15px var(--primary); }
+    button.secondary { background: linear-gradient(45deg, var(--secondary), #ff5500); color: white; }
+
+    .hidden { display: none !important; }
+    .flex-row { display: flex; gap: 10px; }
+
+    /* Typing Animation */
+    .typing-input {
+      transition: all 0.1s ease;
+    }
+    .typing-input:focus {
+      animation: pulse 0.5s infinite alternate;
+    }
+    @keyframes pulse {
+      0% { border-color: var(--primary); box-shadow: 0 0 5px var(--primary); }
+      100% { border-color: var(--secondary); box-shadow: 0 0 15px var(--secondary); }
+    }
+
+    /* Rank Badge Style (Free Fire Vibe) */
+    .rank-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: linear-gradient(90deg, #ff8800, #ff0055);
+      border-radius: 20px;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      margin-top: 5px;
+    }
+
+    .card-box { background: #12131c; padding: 16px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #2a2d42; }
+    .timer { font-size: 28px; color: var(--secondary); text-align: center; font-weight: bold; }
+    .char-display { font-size: 72px; text-align: center; color: var(--primary); text-shadow: 0 0 20px var(--primary); margin: 10px 0; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- หน้า 1: ลงทะเบียน (เซฟความจำลง localStorage ไม่ต้องพิมพ์ใหม่) -->
+  <div id="auth-screen">
+    <h1>⚔️ คำถาม ก-ฮ สู้เพื่อน ⚔️</h1>
+    <div class="card-box">
+      <label>ชื่อผู้เล่น:</label>
+      <input type="text" id="username" placeholder="ใส่ชื่อของคุณ...">
+      
+      <label>จังหวัด (ใช้สำหรับจัดอันดับ 76 จังหวัด):</label>
+      <select id="province">
+        <option value="กรุงเทพมหานคร">กรุงเทพมหานคร</option>
+        <option value="เชียงใหม่">เชียงใหม่</option>
+        <option value="ขอนแก่น">ขอนแก่น</option>
+        <option value="ชลบุรี">ชลบุรี</option>
+        <option value="นครราชสีมา">นครราชสีมา</option>
+        <option value="ภูเก็ต">ภูเก็ต</option>
+        <!-- สามารถเพิ่มให้ครบ 76 จังหวัดได้ -->
+      </select>
+      <button onclick="saveAndRegister()">เข้าสู่ล็อบบี้</button>
+    </div>
+  </div>
+
+  <!-- หน้า 2: UI ล็อบบี้ -->
+  <div id="lobby-screen" class="hidden">
+    <h2>🏰 ล็อบบี้เกม</h2>
+    <div class="card-box" style="text-align: center;">
+      <h3 id="user-display-name">-</h3>
+      <div id="user-rank" class="rank-badge">🏆 แรร์: 1000</div>
+    </div>
+
+    <div class="flex-row">
+      <button onclick="matchmaking()">🔥 กดเริ่มเกม (สุ่มลงแรร์)</button>
+      <button class="secondary" onclick="showCreateRoom()">➕ สร้างห้องเล่นกับเพื่อน</button>
+    </div>
+
+    <div style="margin-top: 15px;">
+      <h3>🔍 ค้นหาห้องด้วย ID</h3>
+      <div class="flex-row">
+        <input type="text" id="search-room-id" placeholder="กรอกรหัส ID ห้อง 6 หลัก">
+        <input type="password" id="search-room-pass" placeholder="รหัสผ่านห้อง (ถ้ามี)">
+        <button onclick="joinRoomById()">เข้าร่วม</button>
+      </div>
+    </div>
+
+    <button style="margin-top: 15px; background: #333; color: white;" onclick="loadLeaderboard()">🏆 ดูตารางจัดอันดับ (จังหวัด/ประเทศ)</button>
+  </div>
+
+  <!-- หน้าสร้างห้อง -->
+  <div id="create-room-screen" class="hidden">
+    <h2>🔑 สร้างห้องใหม่</h2>
+    <input type="text" id="room-name" placeholder="ชื่อห้อง">
+    <input type="password" id="room-password" placeholder="ตั้งรหัสผ่านห้อง (เว้นว่างไว้ถ้าไม่มี)">
+    <button onclick="createRoom()">ยืนยันสร้างห้อง</button>
+    <button class="secondary" onclick="showLobby()">ยกเลิก</button>
+  </div>
+
+  <!-- หน้าห้องรอเล่น (Waiting Room) -->
+  <div id="room-screen" class="hidden">
+    <h2>ห้อง: <span id="room-title"></span> (ID: <span id="room-id-text"></span>)</h2>
+    <div class="card-box">
+      <h3>รายชื่อผู้เล่นในห้อง (<span id="player-count">0</span>/5 คน)</h3>
+      <ul id="player-list" style="list-style: none; padding: 10px 0;"></ul>
+    </div>
+    <button id="btn-start-game" onclick="startGame()">🚀 เริ่มเกมทันที (สำหรับเจ้าของห้อง)</button>
+  </div>
+
+  <!-- หน้าแข่งขันเกม (Gameplay) -->
+  <div id="game-screen" class="hidden">
+    <div class="timer">⏱️ เวลาเหลือ: <span id="time-left">120</span> วินาที</div>
+    <h3>รอบที่ <span id="round-num">1</span>/3 | ตัวอักษรประจำรอบ:</h3>
+    <div class="char-display" id="current-char">ก</div>
+
+    <form id="answers-form">
+      <div id="questions-container"></div>
+      <button type="button" onclick="submitAnswers()">✅ ส่งคำตอบ</button>
+    </form>
+  </div>
+
+  <!-- หน้าโหวตคำตอบ -->
+  <div id="vote-screen" class="hidden">
+    <h2>🗳️ โหวตคำตอบเพื่อน</h2>
+    <p>ถ้าคิดว่าตอบถูกกด 👍 (+10) ถ้าไม่ถูกกด 👎 (-10)</p>
+    <div id="voting-container"></div>
+    <button id="btn-next-round" onclick="finishVotePhase()">➡️ ไปรอบถัดไป</button>
+  </div>
+
+  <!-- หน้าจัดอันดับ Leaderboard -->
+  <div id="leaderboard-screen" class="hidden">
+    <h2>🏆 อันดับท็อปประเทศ (1-10)</h2>
+    <div class="card-box"><ol id="national-board"></ol></div>
+
+    <h2>📍 อันดับท็อปจังหวัด <span id="my-province-title"></span> (1-100)</h2>
+    <div class="card-box"><ol id="province-board"></ol></div>
+
+    <button onclick="showLobby()">กลับสู่ล็อบบี้</button>
+  </div>
+
+</div>
+
+<script>
+  const socket = io();
+  let currentUser = {};
+
+  // เสียงประกอบ Effect (Audio API)
+  const clickSound = new Audio('https://cdn.freesound.org/previews/536/536108_11861866-lq.mp3');
+  const typeSound = new Audio('https://cdn.freesound.org/previews/256/256116_4486188-lq.mp3');
+
+  function playTypeSound() {
+    typeSound.currentTime = 0;
+    typeSound.play().catch(()=>{});
+  }
+
+  // เซฟและโหลดข้อมูลใน localStorage ไม่ให้หายเวลาโหลดเว็บใหม่
+  window.onload = () => {
+    const savedUser = localStorage.getItem('word_game_user');
+    if (savedUser) {
+      currentUser = JSON.parse(savedUser);
+      document.getElementById('username').value = currentUser.username;
+      document.getElementById('province').value = currentUser.province;
+      registerUser(currentUser);
+    }
+  };
+
+  function saveAndRegister() {
+    clickSound.play();
+    const username = document.getElementById('username').value.trim();
+    const province = document.getElementById('province').value;
+
+    if (!username) return alert('กรุณากรอกชื่อผู้เล่น');
+
+    currentUser = { username, province };
+    localStorage.setItem('word_game_user', JSON.stringify(currentUser));
+    registerUser(currentUser);
+  }
+
+  function registerUser(data) {
+    socket.emit('register_user', data);
+  }
+
+  socket.on('user_registered', (res) => {
+    document.getElementById('user-display-name').innerText = res.username + " (" + res.province + ")";
+    document.getElementById('user-rank').innerText = `🏆 แรร์: ${res.stats.rankPoints}`;
+    showLobby();
+  });
+
+  function showLobby() {
+    hideAll();
+    document.getElementById('lobby-screen').classList.remove('hidden');
+  }
+
+  function showCreateRoom() {
+    hideAll();
+    document.getElementById('create-room-screen').classList.remove('hidden');
+  }
+
+  function hideAll() {
+    document.querySelectorAll('.container > div').forEach(el => el.classList.add('hidden'));
+  }
+
+  function createRoom() {
+    const roomName = document.getElementById('room-name').value;
+    const password = document.getElementById('room-password').value;
+    socket.emit('create_room', { roomName, password });
+  }
+
+  function joinRoomById() {
+    const roomId = document.getElementById('search-room-id').value;
+    const password = document.getElementById('search-room-pass').value;
+    socket.emit('join_room', { roomId, password });
+  }
+
+  function matchmaking() {
+    socket.emit('matchmaking');
+  }
+
+  socket.on('room_updated', (room) => {
+    hideAll();
+    document.getElementById('room-screen').classList.remove('hidden');
+    document.getElementById('room-title').innerText = room.name;
+    document.getElementById('room-id-text').innerText = room.id;
+    document.getElementById('player-count').innerText = room.players.length;
+
+    const list = document.getElementById('player-list');
+    list.innerHTML = room.players.map(p => `<li>👤 ${p.username} (${p.province}) - ${p.score} คะแนน</li>`).join('');
+
+    // เฉพาะ host ถึงจะเห็นปุ่มกดเริ่มเกม
+    if (room.hostId === socket.id) {
+      document.getElementById('btn-start-game').classList.remove('hidden');
+    } else {
+      document.getElementById('btn-start-game').classList.add('hidden');
+    }
+  });
+
+  function startGame() {
+    socket.emit('start_game');
+  }
+
+  let timerInterval;
+  socket.on('round_start', (data) => {
+    hideAll();
+    document.getElementById('game-screen').classList.remove('hidden');
+    document.getElementById('round-num').innerText = data.round;
+    document.getElementById('current-char').innerText = data.char;
+
+    const qContainer = document.getElementById('questions-container');
+    qContainer.innerHTML = data.questions.map((q, idx) => `
+      <div class="card-box">
+        <label>${idx+1}. ${q} (ขึ้นต้นด้วยตัว: ${data.char})</label>
+        <input type="text" class="typing-input" oninput="playTypeSound()" id="ans-${idx}" placeholder="พิมพ์คำตอบที่นี่...">
+      </div>
+    `).join('');
+
+    let time = data.thinkTime; // 120 วินาที
+    document.getElementById('time-left').innerText = time;
+
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      time--;
+      document.getElementById('time-left').innerText = time;
+      if (time <= 0) {
+        clearInterval(timerInterval);
+        submitAnswers();
+      }
+    }, 1000);
+  });
+
+  function submitAnswers() {
+    clearInterval(timerInterval);
+    const answers = [];
+    for (let i = 0; i < 6; i++) {
+      const val = document.getElementById(`ans-${i}`)?.value || '-';
+      answers.push(val);
+    }
+    socket.emit('submit_answers', answers);
+  }
+
+  socket.on('start_voting', ({ answers, players }) => {
+    hideAll();
+    document.getElementById('vote-screen').classList.remove('hidden');
+    const container = document.getElementById('voting-container');
+    container.innerHTML = '';
+
+    players.forEach(p => {
+      if (p.id !== socket.id && answers[p.id]) {
+        const userAns = answers[p.id];
+        let html = `<div class="card-box"><h4>คำตอบของ: ${p.username}</h4>`;
+        userAns.forEach((ans, idx) => {
+          html += `<p>คำถามที่ ${idx+1}: <b>${ans}</b></p>`;
+        });
+        html += `
+          <div class="flex-row" style="margin-top:10px;">
+            <button onclick="vote('${p.id}', true)">👍 ถูกต้อง (+10)</button>
+            <button class="secondary" onclick="vote('${p.id}', false)">👎 ไม่ถูก (-10)</button>
+          </div>
+        </div>`;
+        container.innerHTML += html;
+      }
+    });
+  });
+
+  function vote(targetSocketId, isCorrect) {
+    clickSound.play();
+    socket.emit('cast_vote', { targetSocketId, isCorrect });
+  }
+
+  function finishVotePhase() {
+    socket.emit('finish_vote_phase');
+  }
+
+  socket.on('game_over', (data) => {
+    alert(`🎉 จบเกม 3 ตา! ผู้ชนะคือ: ${data.winner.username} สกอร์: ${data.winner.score} คะแนน`);
+    showLobby();
+  });
+
+  socket.on('error_msg', (msg) => {
+    alert(msg);
+  });
+
+  function loadLeaderboard() {
+    socket.emit('get_leaderboard');
+  }
+
+  socket.on('leaderboard_data', (data) => {
+    hideAll();
+    document.getElementById('leaderboard-screen').classList.remove('hidden');
+    document.getElementById('my-province-title').innerText = `(${data.userProvince})`;
+
+    const nationalList = document.getElementById('national-board');
+    nationalList.innerHTML = data.national.map(p => `<li><b>${p.username}</b> - แรร์: ${p.rankPoints} (${p.province})</li>`).join('');
+
+    const provinceList = document.getElementById('province-board');
+    provinceList.innerHTML = data.province.map(p => `<li><b>${p.username}</b> - แรร์: ${p.rankPoints}</li>`).join('');
+  });
+</script>
+</body>
+</html>
