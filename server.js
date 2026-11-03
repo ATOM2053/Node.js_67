@@ -7,13 +7,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, 'public')));
+// เสิร์ฟไฟล์ HTML จากโฟลเดอร์หลักของโปรเจกต์
+app.use(express.static(__dirname));
 
-// ข้อมูลจำลอง Leaderboard (ในการใช้งานจริงสามารถเชื่อมต่อกับ Database ได้)
-let playersDB = {}; // { username: { rankScore, province, totalScore } }
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
+let playersDB = {}; 
 const THAI_CHARACTERS = ['ก', 'ข', 'ค', 'ง', 'จ', 'ฉ', 'ช', 'ซ', 'ด', 'ต', 'ถ', 'ท', 'น', 'บ', 'ป', 'ผ', 'ฝ', 'พ', 'ฟ', 'ม', 'ย', 'ร', 'ล', 'ว', 'ศ', 'ส', 'ห', 'อ'];
-
 const QUESTIONS = [
   "หมวดของกินในชีวิตประจำวัน",
   "หมวดสิ่งของในบ้าน",
@@ -31,12 +33,11 @@ function generateRoomId() {
 
 io.on('connection', (socket) => {
 
-  // ลงทะเบียนผู้เล่น
   socket.on('register_user', (userData) => {
-    socket.userData = userData; // { username, province }
+    socket.userData = userData;
     if (!playersDB[userData.username]) {
       playersDB[userData.username] = {
-        rankPoints: 1000, // คะแนนแรร์เริ่มต้น (Grandmaster/Heroic style)
+        rankPoints: 1000, 
         province: userData.province || 'กรุงเทพมหานคร',
         wins: 0
       };
@@ -44,7 +45,6 @@ io.on('connection', (socket) => {
     socket.emit('user_registered', { ...userData, stats: playersDB[userData.username] });
   });
 
-  // สร้างห้องเล่นกับเพื่อน
   socket.on('create_room', ({ roomName, password }) => {
     const roomId = generateRoomId();
     rooms[roomId] = {
@@ -52,24 +52,22 @@ io.on('connection', (socket) => {
       name: roomName,
       password: password,
       hostId: socket.id,
-      isRanked: false, // สร้างห้องเอง คะแนนแรร์จะไม่เพิ่ม
+      isRanked: false,
       players: [],
       maxPlayers: 5,
       gameState: 'LOBBY',
       currentRound: 0,
       totalRounds: 3,
-      answers: {}, // { socketId: [ans1, ans2, ...] }
-      votes: {}    // { targetSocketId: count }
+      answers: {},
+      votes: {}
     };
     joinRoomHelper(socket, roomId, password);
   });
 
-  // ค้นหาและเข้าร่วมห้อง
   socket.on('join_room', ({ roomId, password }) => {
     joinRoomHelper(socket, roomId, password);
   });
 
-  // เล่นสุ่มห้อง (โหมดสุ่มจัดอันดับ - เพิ่มคะแนนแรร์)
   socket.on('matchmaking', () => {
     let targetRoom = Object.values(rooms).find(r => r.isRanked && r.gameState === 'LOBBY' && r.players.length < 5);
     if (!targetRoom) {
@@ -79,7 +77,7 @@ io.on('connection', (socket) => {
         name: "สุ่มแข่งขันแรร์ (Ranked)",
         password: "",
         hostId: socket.id,
-        isRanked: true, // เพิ่มคะแนนแรร์เมื่อจบเกม
+        isRanked: true,
         players: [],
         maxPlayers: 5,
         gameState: 'LOBBY',
@@ -114,12 +112,10 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('room_updated', room);
   }
 
-  // เริ่มเกมโดยเจ้าของห้อง
   socket.on('start_game', () => {
     const roomId = socket.currentRoomId;
     const room = rooms[roomId];
     if (!room || room.hostId !== socket.id) return;
-
     startNextRound(roomId);
   });
 
@@ -129,7 +125,6 @@ io.on('connection', (socket) => {
 
     room.currentRound += 1;
     if (room.currentRound > room.totalRounds) {
-      // จบเกม 3 ตา
       finishGame(roomId);
       return;
     }
@@ -138,26 +133,22 @@ io.on('connection', (socket) => {
     room.answers = {};
     room.votes = {};
 
-    // สุ่มตัวอักษร ก-ฮ
     const randomChar = THAI_CHARACTERS[Math.floor(Math.random() * THAI_CHARACTERS.length)];
 
     io.to(roomId).emit('round_start', {
       round: room.currentRound,
       char: randomChar,
       questions: QUESTIONS,
-      thinkTime: 120, // เวลาคิด 120 วินาที
-      playTime: 60    // เวลาตอบ 60 วินาที
+      thinkTime: 120,
+      playTime: 60
     });
   }
 
-  // ส่งคำตอบ
   socket.on('submit_answers', (userAnswers) => {
     const room = rooms[socket.currentRoomId];
     if (!room) return;
-
     room.answers[socket.id] = userAnswers;
 
-    // เมื่อทุกคนตอบครบ หรือหมดเวลา ให้เข้าสู่ช่วงโหวต
     if (Object.keys(room.answers).length >= room.players.length) {
       startVotePhase(socket.currentRoomId);
     }
@@ -174,7 +165,6 @@ io.on('connection', (socket) => {
     });
   }
 
-  // ส่งผลการโหวต
   socket.on('cast_vote', ({ targetSocketId, isCorrect }) => {
     const room = rooms[socket.currentRoomId];
     if (!room) return;
@@ -182,16 +172,15 @@ io.on('connection', (socket) => {
     const targetPlayer = room.players.find(p => p.id === targetSocketId);
     if (targetPlayer) {
       if (isCorrect) {
-        targetPlayer.score += 10; // ตอบถูก +10 คะแนน
+        targetPlayer.score += 10;
       } else {
-        targetPlayer.score -= 10; // ตอบผิด -10 คะแนน
+        targetPlayer.score -= 10;
       }
     }
 
     io.to(socket.currentRoomId).emit('update_scores', room.players);
   });
 
-  // จบการโหวตประจำตา และไปตาถัดไป
   socket.on('finish_vote_phase', () => {
     const room = rooms[socket.currentRoomId];
     if (!room || room.hostId !== socket.id) return;
@@ -203,15 +192,12 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     room.gameState = 'FINISHED';
-
-    // คำนวณผู้ชนะ
     room.players.sort((a, b) => b.score - a.score);
     const winner = room.players[0];
 
-    // เพิ่มคะแนน Rank (แรร์) เฉพาะโหมดสุ่มแข่ง
     if (room.isRanked && winner) {
       if (playersDB[winner.username]) {
-        playersDB[winner.username].rankPoints += 50; // เพิ่มคะแนนแรร์ +50
+        playersDB[winner.username].rankPoints += 50;
       }
     }
 
@@ -222,17 +208,13 @@ io.on('connection', (socket) => {
     });
   }
 
-  // ดึงข้อมูล Leaderboard
   socket.on('get_leaderboard', () => {
     const allPlayers = Object.entries(playersDB).map(([name, data]) => ({
       username: name,
       ...data
     }));
 
-    // ท็อปประเทศ 1-10
     const nationalTop10 = [...allPlayers].sort((a, b) => b.rankPoints - a.rankPoints).slice(0, 10);
-
-    // ท็อปจังหวัด 1-100
     const userProv = socket.userData ? socket.userData.province : 'กรุงเทพมหานคร';
     const provinceTop100 = [...allPlayers]
       .filter(p => p.province === userProv)
@@ -263,4 +245,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-
